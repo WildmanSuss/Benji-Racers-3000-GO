@@ -289,9 +289,57 @@
 
 let car1 = null, car2 = null;
   let car1OK = false, car2OK = false;
+  // Player selectable car sprites
+  let carA = null, carB = null;
+  let carAOK = false, carBOK = false;
 
   // --- modes ---
-  const MODE = { RACE: 'race', TIME: 'time' };
+  const MODE = { RACE: 'race', TIME: 'time', GARAGE: 'garage' };
+
+  // --- garage / car selection ---
+  // Update these filenames to match your assets.
+  // Sprites: used in-game for the player car.
+  // Heroes: used in the Garage screen as a big display image.
+  const GARAGE_CARS = [
+    { id: 'red',  name: 'Red Racer',  sprite: 'assets/car_red.png',  hero: 'assets/garage_red.png',  scale: 1.00 },
+    { id: 'blue', name: 'Blue Racer', sprite: 'assets/car_blue.png', hero: 'assets/garage_blue.png', scale: 1.23 },
+  ];
+
+  // Optional unlock gate (set to 0 to always unlock):
+  // Example: 110 means Garage unlocks after reaching 110 Top MPH in Time Trial.
+  const GARAGE_UNLOCK_TOP_MPH = 0;
+
+  const LS_KEYS = {
+    selectedCar: 'benji_selected_car_v1',
+    garageUnlocked: 'benji_garage_unlocked_v1',
+    bestTopMph: 'benji_best_topmph_v1'
+  };
+
+  function getSelectedCarId() {
+    const v = localStorage.getItem(LS_KEYS.selectedCar);
+    return GARAGE_CARS.some(c => c.id === v) ? v : GARAGE_CARS[0].id;
+  }
+  function setSelectedCarId(id) {
+    if (!GARAGE_CARS.some(c => c.id === id)) return;
+    localStorage.setItem(LS_KEYS.selectedCar, id);
+  }
+  function getBestTopMph() {
+    const v = Number(localStorage.getItem(LS_KEYS.bestTopMph) || '0');
+    return Number.isFinite(v) ? v : 0;
+  }
+  function setBestTopMph(v) {
+    const n = Math.max(0, Math.floor(v || 0));
+    localStorage.setItem(LS_KEYS.bestTopMph, String(n));
+  }
+  function isGarageUnlocked() {
+    if (GARAGE_UNLOCK_TOP_MPH <= 0) return true;
+    const explicit = localStorage.getItem(LS_KEYS.garageUnlocked);
+    if (explicit === '1') return true;
+    return getBestTopMph() >= GARAGE_UNLOCK_TOP_MPH;
+  }
+  function markGarageUnlocked() {
+    localStorage.setItem(LS_KEYS.garageUnlocked, '1');
+  }
 
   // --- constants ---
   const MPH_START = 10;
@@ -466,6 +514,15 @@ let car1 = null, car2 = null;
     state.ended = false;
     engineStop();
 
+    // Persist best Top MPH (used for optional Garage unlock)
+    try {
+      const prevBest = getBestTopMph();
+      if (state.topMph > prevBest) setBestTopMph(state.topMph);
+      if (GARAGE_UNLOCK_TOP_MPH > 0 && state.mode === MODE.TIME && state.topMph >= GARAGE_UNLOCK_TOP_MPH) {
+        markGarageUnlocked();
+      }
+    } catch {}
+
     card.innerHTML = `
       <div style="font-size:34px; font-weight:900; margin-bottom:6px;">Benji Racers</div>
 
@@ -480,6 +537,7 @@ let car1 = null, car2 = null;
       <div class="btnRow">
         <button id="btnRace">Race to 100 (Rival)</button>
         <button id="btnTime">Time Trial (2:00)</button>
+        <button id="btnGarage">Garage</button>
       </div>
 
       <div style="margin-top:12px; font-size:13px; opacity:0.75;">
@@ -513,12 +571,106 @@ let car1 = null, car2 = null;
 
     document.getElementById('btnRace').onclick = () => { sfxPlay('click'); startGame(MODE.RACE); };
     document.getElementById('btnTime').onclick = () => { sfxPlay('click'); startGame(MODE.TIME); };
+    document.getElementById('btnGarage').onclick = () => { sfxPlay('click'); showGarageScreen(); };
   }
+
+
+  function showGarageScreen() {
+    state.running = false;
+    state.ended = false;
+    engineStop();
+
+    const unlocked = isGarageUnlocked();
+    const best = getBestTopMph();
+
+    const selected = getSelectedCarId();
+    const tiles = GARAGE_CARS.map(c => {
+      const isSel = c.id === selected;
+      const lockOverlay = unlocked ? '' : `
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+                    background: rgba(0,0,0,0.55); border-radius:16px; font-weight:900;">
+          Locked
+        </div>`;
+      return `
+        <button class="garageTile" data-car="${c.id}" ${unlocked ? '' : 'disabled'} style="
+          position:relative;
+          padding: 14px;
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.16);
+          background: ${isSel ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.10)'};
+          color: ${isSel ? '#111' : '#fff'};
+          text-align: left;
+          cursor: ${unlocked ? 'pointer' : 'not-allowed'};
+        ">
+          <div style="font-weight:900; font-size:18px; margin-bottom:8px;">${c.name}${isSel ? ' (Selected)' : ''}</div>
+          <div style="width:100%; aspect-ratio: 16/10; border-radius: 14px; overflow:hidden;
+                      background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.10);">
+            <img src="${c.hero}" alt="${c.name}" style="width:100%; height:100%; object-fit:contain; display:block;"
+              onerror="this.style.display='none'; this.parentElement.style.display='none';" />
+          </div>
+          ${lockOverlay}
+        </button>
+      `;
+    }).join('');
+
+    const lockLine = unlocked ? '' : `
+      <div style="margin-top:10px; font-size:14px; opacity:0.85;">
+        Unlock the Garage by reaching <b>${GARAGE_UNLOCK_TOP_MPH} Top MPH</b> in Time Trial.
+        Your best: <b>${Math.round(best)} MPH</b>.
+      </div>`;
+
+    card.innerHTML = `
+      <div style="font-size:34px; font-weight:900; margin-bottom:6px;">Garage</div>
+      <div style="font-size:15px; opacity:0.90; line-height:1.35;">
+        Pick your car. (This only changes your car; the rival stays the same.)
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr; gap:12px; margin-top:14px;">
+        ${tiles}
+      </div>
+
+      ${lockLine}
+
+      <div class="btnRow" style="margin-top:14px;">
+        <button id="btnGarageBack">Back to Menu</button>
+      </div>
+    `;
+
+    overlay.style.display = 'flex';
+    if (hint) hint.style.display = 'none';
+
+    // Tile selection
+    const btns = Array.from(card.querySelectorAll('.garageTile'));
+    for (const b of btns) {
+      b.addEventListener('click', () => {
+        if (!unlocked) return;
+        const id = b.getAttribute('data-car');
+        setSelectedCarId(id);
+        sfxPlay('click');
+        // refresh screen so "Selected" moves
+        showGarageScreen();
+      });
+    }
+
+    document.getElementById('btnGarageBack').onclick = () => { sfxPlay('click'); showTitleScreen(); };
+
+    maybeShowAudioHint();
+  }
+
 
   function showEndScreen(title, bodyHtml) {
     state.running = false;
     state.ended = true;
     engineStop();
+
+    // Persist best Top MPH (used for optional Garage unlock)
+    try {
+      const prevBest = getBestTopMph();
+      if (state.topMph > prevBest) setBestTopMph(state.topMph);
+      if (GARAGE_UNLOCK_TOP_MPH > 0 && state.mode === MODE.TIME && state.topMph >= GARAGE_UNLOCK_TOP_MPH) {
+        markGarageUnlocked();
+      }
+    } catch {}
 
     card.innerHTML = `
       <div style="font-size:34px; font-weight:900; margin-bottom:6px;">${title}</div>
@@ -826,7 +978,12 @@ let car1 = null, car2 = null;
     if (state.mode === MODE.RACE && rival.active) {
       drawSpriteCentered(car2OK ? car2 : null, rival.x, rival.y, rival.w, rival.h, wob * 0.35);
     }
-    drawSpriteCentered(car1OK ? car1 : null, player.x, player.y, player.w, player.h, wob);
+    // Player car depends on Garage selection
+    const sel = getSelectedCarId();
+    const pImg = (sel === 'blue') ? (carBOK ? carB : null) : (carAOK ? carA : null);
+        const cfg = GARAGE_CARS.find(c => c.id === sel) || GARAGE_CARS[0];
+    const sc = (cfg && cfg.scale) ? cfg.scale : 1;
+    drawSpriteCentered(pImg, player.x, player.y, player.w * sc, player.h * sc, wob);
   }
 
   // --- main loop ---
@@ -1047,11 +1204,16 @@ let car1 = null, car2 = null;
   (async () => {
     initAudio();
     maybeShowAudioHint();
-    const a = await loadImg('assets/car.png');
-    car1OK = a.ok; car1 = a.img;
+    const a = await loadImg(GARAGE_CARS[0].sprite);
+    carAOK = a.ok; carA = a.img;
 
+    const a2 = await loadImg(GARAGE_CARS[1].sprite);
+    carBOK = a2.ok; carB = a2.img;
+
+    // Rival car sprite (unchanged)
     const b = await loadImg('assets/car2.png');
     car2OK = b.ok; car2 = b.img;
+
 
     showTitleScreen();
     requestAnimationFrame(tick);
