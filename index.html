@@ -289,9 +289,9 @@
 
 let car1 = null, car2 = null;
   let car1OK = false, car2OK = false;
-  // Player selectable car sprites
-  let carA = null, carB = null;
-  let carAOK = false, carBOK = false;
+  // Player selectable car sprites (loaded dynamically from GARAGE_CARS)
+  const carSprites = Object.create(null); // id -> { img, ok }
+
 
   // --- modes ---
   const MODE = { RACE: 'race', TIME: 'time', GARAGE: 'garage' };
@@ -301,8 +301,11 @@ let car1 = null, car2 = null;
   // Sprites: used in-game for the player car.
   // Heroes: used in the Garage screen as a big display image.
   const GARAGE_CARS = [
-    { id: 'red',  name: 'Red Racer',  sprite: 'assets/car_red.png',  hero: 'assets/garage_red.png',  scale: 1.00 },
-    { id: 'blue', name: 'Blue Racer', sprite: 'assets/car_blue.png', hero: 'assets/garage_blue.png', scale: 1.23 },
+    { id: 'red',     name: 'Red Racer',     sprite: 'assets/car_red.png',     hero: 'assets/garage_red.png' },
+    { id: 'blue',    name: 'Blue Racer',    sprite: 'assets/car_blue.png',    hero: 'assets/garage_blue.png' },
+    { id: 'pink',    name: 'Pink Racer',    sprite: 'assets/car_pink.png',    hero: 'assets/garage_pink.png' },
+    { id: 'green',   name: 'Green Racer',   sprite: 'assets/car_green.png',   hero: 'assets/garage_green.png' },
+    { id: 'mystery', name: 'Mystery Racer', sprite: 'assets/car_mystery.png', hero: 'assets/garage_mystery.png' },
   ];
 
   // Optional unlock gate (set to 0 to always unlock):
@@ -990,10 +993,9 @@ let car1 = null, car2 = null;
     }
     // Player car depends on Garage selection
     const sel = getSelectedCarId();
-    const pImg = (sel === 'blue') ? (carBOK ? carB : null) : (carAOK ? carA : null);
-        const cfg = GARAGE_CARS.find(c => c.id === sel) || GARAGE_CARS[0];
-    const sc = (cfg && cfg.scale) ? cfg.scale : 1;
-    drawSpriteCentered(pImg, player.x, player.y, player.w * sc, player.h * sc, wob);
+    const rec = carSprites[sel] || carSprites[GARAGE_CARS[0].id] || null;
+    const pImg = (rec && rec.ok) ? rec.img : null;
+    drawSpriteCentered(pImg, player.x, player.y, player.w, player.h, wob);
   }
 
   // --- main loop ---
@@ -1214,11 +1216,11 @@ let car1 = null, car2 = null;
   (async () => {
     initAudio();
     maybeShowAudioHint();
-    const a = await loadImg(GARAGE_CARS[0].sprite);
-    carAOK = a.ok; carA = a.img;
-
-    const a2 = await loadImg(GARAGE_CARS[1].sprite);
-    carBOK = a2.ok; carB = a2.img;
+    // Load all selectable player cars
+    for (const c of GARAGE_CARS) {
+      const r = await loadImg(c.sprite);
+      carSprites[c.id] = { ok: r.ok, img: r.img };
+    }
 
     // Rival car sprite (unchanged)
     const b = await loadImg('assets/car2.png');
