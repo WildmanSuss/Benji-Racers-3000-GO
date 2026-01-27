@@ -294,7 +294,7 @@ let car1 = null, car2 = null;
 
 
   // --- modes ---
-  const MODE = { RACE: 'race', TIME: 'time', GARAGE: 'garage', CHAMP: 'champ' };
+  const MODE = { RACE: 'race', TIME: 'time', GARAGE: 'garage' };
 
   // --- garage / car selection ---
   // Update these filenames to match your assets.
@@ -343,21 +343,6 @@ let car1 = null, car2 = null;
   function markGarageUnlocked() {
     localStorage.setItem(LS_KEYS.garageUnlocked, '1');
   }
-
-
-// --- Champion Race (new mode) ---
-// Unlock: hit >= 200 Top MPH in Time Trial.
-const CHAMP_UNLOCK_TOP_MPH = 200;
-
-// Hidden finish distance (we show a progress bar, not the number).
-const CHAMP_FINISH_DIST = 400;
-
-// Lose after 6 mistakes (cones + edge scrapes).
-const CHAMP_MAX_MISTAKES = 6;
-
-// "Starts fast" feel:
-const CHAMP_START_MPH_PLAYER = 170;
-const CHAMP_START_MPH_CHAMP  = 185;
 
   // --- constants ---
   const MPH_START = 10;
@@ -439,18 +424,6 @@ const CHAMP_START_MPH_CHAMP  = 185;
     timeLeft: 120,
 
     rivalCrashCD: 0,
-
-// champion race
-playerDist: 0,
-champDist: 0,
-mistakes: 0,
-
-champMph: 0,
-champLane: 1,         // float (for smooth lane switching)
-champTargetLane: 1,   // int 0-2
-champLaneCD: 0,
-
-endCine: null,        // { type:'lose'|'win', t:number }
   };
 
   const player = {
@@ -473,21 +446,6 @@ endCine: null,        // { type:'lose'|'win', t:number }
     mph: MPH_START,
     yOffset: -120,
   };
-
-const champ = {
-  active: false,
-  lane: 1,
-  laneF: 1,
-  targetLane: 1,
-  x: W * 0.5,
-  y: H * 0.40,
-  w: 86,
-  h: 132,
-  mph: 0,
-  yOffset: -160,
-  laneCD: 0,
-};
-
 
   function setMph(next) {
     const val = (state.mode === MODE.RACE)
@@ -584,11 +542,8 @@ const champ = {
       <div class="btnRow">
         <button id="btnRace">Race to 100 (Rival)</button>
         <button id="btnTime">Time Trial (1:00)</button>
-        <button id="btnChamp">Champion Race</button>
         <button id="btnGarage">Garage</button>
       </div>
-
-      <div id="champLockLine" style="margin-top:10px; font-size:14px; opacity:0.82;"></div>
 
       <div style="margin-top:12px; font-size:13px; opacity:0.75;">
         Tip: On iPad, Share → Add to Home Screen.
@@ -622,28 +577,6 @@ const champ = {
     document.getElementById('btnRace').onclick = () => { sfxPlay('click'); startGame(MODE.RACE); };
     document.getElementById('btnTime').onclick = () => { sfxPlay('click'); startGame(MODE.TIME); };
     document.getElementById('btnGarage').onclick = () => { sfxPlay('click'); showGarageScreen(); };
-
-    // Champion Race unlock (Top MPH >= 200 in Time Trial)
-    const best = getBestTopMph();
-    const champUnlocked = best >= CHAMP_UNLOCK_TOP_MPH;
-    const champBtn = document.getElementById('btnChamp');
-    const champLine = document.getElementById('champLockLine');
-
-    if (champBtn) {
-      champBtn.disabled = !champUnlocked;
-      champBtn.style.opacity = champUnlocked ? '1' : '0.45';
-      champBtn.style.cursor = champUnlocked ? 'pointer' : 'not-allowed';
-      champBtn.onclick = () => {
-        if (!champUnlocked) return;
-        sfxPlay('click');
-        startGame(MODE.CHAMP);
-      };
-    }
-    if (champLine) {
-      champLine.innerHTML = champUnlocked
-        ? `<span style="opacity:0.95;">Champion Race unlocked ✅</span>`
-        : `Unlock Champion Race: hit <b>${CHAMP_UNLOCK_TOP_MPH} Top MPH</b> in Time Trial. Your best: <b>${Math.round(best)} MPH</b>.`;
-    }
   }
 
 
@@ -810,24 +743,6 @@ const champ = {
 
     state.timeLeft = 120;
 
-    // Champion race state
-    state.playerDist = 0;
-    state.champDist = 0;
-    state.mistakes = 0;
-    state.champMph = 0;
-    state.champLane = 1;
-    state.champTargetLane = 1;
-    state.champLaneCD = 0;
-    state.endCine = null;
-
-    champ.active = false;
-    champ.lane = 1;
-    champ.laneF = 1;
-    champ.targetLane = 1;
-    champ.mph = 0;
-    champ.yOffset = -160;
-    champ.laneCD = 0;
-
     objs.length = 0;
     initStripes();
     spawnConeCD = 0;
@@ -844,28 +759,6 @@ const champ = {
       setRivalMph(clamp(MPH_START + (Math.random()*8 - 4), 6, 18));
       updateRivalX();
       rival.y = player.y + rival.yOffset;
-    } else if (state.mode === MODE.CHAMP) {
-      // Champion race: rival off, champion on
-      rival.active = false;
-
-      // Start fast
-      setMph(CHAMP_START_MPH_PLAYER);
-      state.topMph = Math.max(state.topMph, state.mph);
-
-      state.playerDist = 0;
-      state.champDist = 0;
-      state.mistakes = 0;
-
-      champ.active = true;
-      champ.lane = 1;
-      champ.laneF = 1;
-      champ.targetLane = 1;
-      champ.mph = CHAMP_START_MPH_CHAMP;
-      champ.yOffset = -160;
-      champ.laneCD = 0.6;
-
-      updateChampX();
-      champ.y = player.y + champ.yOffset;
     } else {
       rival.active = false;
     }
@@ -1037,16 +930,6 @@ const champ = {
     rival.x = centers[rival.lane] + Math.sin(state.t*1.5) * 6;
   }
 
-  function updateChampX() {
-    const centers = laneCenters();
-    const i = clamp(champ.laneF, 0, 2);
-    const left = Math.floor(i);
-    const right = Math.min(2, left + 1);
-    const frac = i - left;
-    champ.x = (centers[left] * (1 - frac) + centers[right] * frac) + Math.sin(state.t*1.1) * 5;
-  }
-
-
   function fmtTime(seconds) {
     const s = Math.max(0, Math.ceil(seconds));
     const m = Math.floor(s / 60);
@@ -1081,39 +964,6 @@ const champ = {
         ctx.font = '800 16px system-ui, -apple-system, Segoe UI, Roboto, Arial';
         ctx.fillText(`FINISH LINE!`, 14, 76);
       }
-    } else if (state.mode === MODE.CHAMP) {
-      // Progress bar race (hidden 400 under the hood)
-      const barX = 14, barY = 44, barW = 280, barH = 14;
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.fillRect(barX, barY, barW, barH);
-
-      const pPct = clamp(state.playerDist / CHAMP_FINISH_DIST, 0, 1);
-      const cPct = clamp(state.champDist / CHAMP_FINISH_DIST, 0, 1);
-
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(barX, barY, barW, barH);
-
-      const py = barY + barH/2;
-      const px = barX + barW * pPct;
-      const cx = barX + barW * cPct;
-
-      ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI*2); ctx.fill();
-
-      ctx.fillStyle = 'rgba(255,120,120,0.92)';
-      ctx.beginPath(); ctx.arc(cx, py, 6, 0, Math.PI*2); ctx.fill();
-
-      ctx.font = '800 13px system-ui, -apple-system, Segoe UI, Roboto, Arial';
-      ctx.fillStyle = 'rgba(255,255,255,0.78)';
-      ctx.fillText('YOU', barX, barY + barH + 16);
-      ctx.fillStyle = 'rgba(255,120,120,0.86)';
-      ctx.fillText('CHAMP', barX + 58, barY + barH + 16);
-
-      ctx.font = '800 16px system-ui, -apple-system, Segoe UI, Roboto, Arial';
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillText(`Mistakes: ${state.mistakes}/${CHAMP_MAX_MISTAKES}`, 14, 84);
-
     } else {
       ctx.font = '800 18px system-ui, -apple-system, Segoe UI, Roboto, Arial';
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -1137,25 +987,16 @@ const champ = {
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
   }
 
-
-function drawCars(wob) {
-  // Rival (race mode)
-  if (state.mode === MODE.RACE && rival.active) {
-    drawSpriteCentered(car2OK ? car2 : null, rival.x, rival.y, rival.w, rival.h, wob * 0.35);
+  function drawCars(wob) {
+    if (state.mode === MODE.RACE && rival.active) {
+      drawSpriteCentered(car2OK ? car2 : null, rival.x, rival.y, rival.w, rival.h, wob * 0.35);
+    }
+    // Player car depends on Garage selection
+    const sel = getSelectedCarId();
+    const rec = carSprites[sel] || carSprites[GARAGE_CARS[0].id] || null;
+    const pImg = (rec && rec.ok) ? rec.img : null;
+    drawSpriteCentered(pImg, player.x, player.y, player.w, player.h, wob);
   }
-
-  // Champion (champion mode) - uses the same rival sprite for now
-  if (state.mode === MODE.CHAMP && champ.active) {
-    drawSpriteCentered(car2OK ? car2 : null, champ.x, champ.y, champ.w, champ.h, wob * 0.20);
-  }
-
-  // Player car depends on Garage selection
-  const sel = getSelectedCarId();
-  const rec = carSprites[sel] || carSprites[GARAGE_CARS[0].id] || null;
-  const pImg = (rec && rec.ok) ? rec.img : null;
-  drawSpriteCentered(pImg, player.x, player.y, player.w, player.h, wob);
-}
-
 
   // --- main loop ---
   function tick(ts) {
@@ -1210,83 +1051,6 @@ function drawCars(wob) {
       updateRivalX(); // keep x current BEFORE object collisions
     }
 
-
-// champion (champion mode only)
-if (state.mode === MODE.CHAMP && champ.active) {
-  // End cinematic disables normal interaction
-  if (state.endCine) {
-    state.endCine.t += dt;
-
-    if (state.endCine.type === 'lose') {
-      // player slows, champ surges and passes
-      setMph(state.mph + (90 - state.mph) * (dt * 2.2));
-      champ.mph += (240 - champ.mph) * (dt * 2.2);
-      champ.yOffset += (-260 - champ.yOffset) * (dt * 2.2); // champ shoots ahead
-    } else {
-      // win: player surges slightly, champ falls back
-      setMph(state.mph + (210 - state.mph) * (dt * 1.8));
-      champ.mph += (150 - champ.mph) * (dt * 1.6);
-      champ.yOffset += (120 - champ.yOffset) * (dt * 1.8); // champ drops behind
-    }
-
-    // Update distances during the cine so the bar keeps moving
-    const k = 0.22;
-    state.playerDist += state.mph * dt * k;
-    state.champDist  += champ.mph * dt * k;
-
-    champ.y = player.y + champ.yOffset;
-    updateChampX();
-
-    if (state.endCine.t > 1.15) {
-      if (state.endCine.type === 'lose') {
-        sfxPlay('lose');
-        showEndScreen('Oh no!', `The Champion passed you.<br><b>Mistakes:</b> ${state.mistakes}/${CHAMP_MAX_MISTAKES}`);
-      } else {
-        sfxPlay('win');
-        showEndScreen('You Win!', `You beat the Champion!`);
-      }
-      return;
-    }
-  } else {
-    // Normal champ race updates
-    const k = 0.22; // mph -> distance scale
-    state.playerDist += state.mph * dt * k;
-    state.champDist  += champ.mph * dt * k;
-
-    // Light rubber banding
-    const gap = state.champDist - state.playerDist; // + means champ ahead
-    let target = state.mph + 10;
-
-    if (gap > 45) target -= 12;
-    if (gap < -25) target += 14;
-
-    target = clamp(target, 150, 240);
-    champ.mph += (target - champ.mph) * (dt * 2.6);
-
-    // Occasional lane changes
-    champ.laneCD -= dt;
-    if (champ.laneCD <= 0) {
-      champ.laneCD = 0.7 + Math.random() * 0.6;
-      champ.targetLane = Math.floor(Math.random() * 3);
-    }
-    champ.laneF += (champ.targetLane - champ.laneF) * (dt * 4.0);
-    champ.laneF = clamp(champ.laneF, 0, 2);
-    updateChampX();
-
-    // Place champ vertically relative to distance gap
-    const pxPerDist = 3.0;
-    champ.yOffset = clamp(-160 - gap * pxPerDist, -260, 140);
-    champ.y = player.y + champ.yOffset;
-
-    // Finish check
-    if (state.playerDist >= CHAMP_FINISH_DIST) {
-      state.endCine = { type: 'win', t: 0 };
-    } else if (state.champDist >= CHAMP_FINISH_DIST) {
-      state.endCine = { type: 'lose', t: 0 };
-    }
-  }
-}
-
     // finish trigger (race mode only)
     if (state.mode === MODE.RACE && !state.finishActive && state.mph >= MPH_GOAL) {
       state.finishActive = true;
@@ -1315,7 +1079,7 @@ if (state.mode === MODE.CHAMP && champ.active) {
     spawnBoostCD -= dt;
 
     const spdFactor = clamp(state.mph / 60, 0.3, 1.45);
-    const boostBias = (state.mode === MODE.TIME) ? 1.25 : (state.mode === MODE.CHAMP ? 1.15 : 1.0);
+    const boostBias = (state.mode === MODE.TIME) ? 1.25 : 1.0;
 
     const allowSpawns = (state.mode === MODE.TIME) || (!state.finishActive);
     if (allowSpawns) {
@@ -1344,11 +1108,6 @@ if (state.mode === MODE.CHAMP && champ.active) {
       doBump();
       sfxPlay('bump');
       setMph(state.mph - MPH_EDGE_SCRAPE_LOSS);
-
-      if (state.mode === MODE.CHAMP && !state.endCine) {
-        state.mistakes++;
-        if (state.mistakes >= CHAMP_MAX_MISTAKES) state.endCine = { type: 'lose', t: 0 };
-      }
     }
 
     // update objects + collisions for both cars
@@ -1363,19 +1122,8 @@ if (state.mode === MODE.CHAMP && champ.active) {
       const prh = player.h*0.80;
 
       if (rectCircleCollide(prx, pry, prw, prh, o.x, o.y, o.r)) {
-        if (o.type === 'boost') {
-          setMph(state.mph + MPH_BOOST_GAIN);
-          sfxPlay('boost');
-        } else {
-          doBump();
-          sfxPlay('cone');
-          setMph(state.mph - MPH_CONE_LOSS);
-
-          if (state.mode === MODE.CHAMP && !state.endCine) {
-            state.mistakes++;
-            if (state.mistakes >= CHAMP_MAX_MISTAKES) state.endCine = { type: 'lose', t: 0 };
-          }
-        }
+        if (o.type === 'boost') { setMph(state.mph + MPH_BOOST_GAIN); sfxPlay('boost'); }
+        else { doBump(); sfxPlay('cone'); setMph(state.mph - MPH_CONE_LOSS); }
         objs.splice(i, 1);
         continue;
       }
@@ -1390,19 +1138,6 @@ if (state.mode === MODE.CHAMP && champ.active) {
         if (rectCircleCollide(rrx, rry, rrw, rrh, o.x, o.y, o.r)) {
           if (o.type === 'boost') setRivalMph(rival.mph + MPH_BOOST_GAIN);
           else setRivalMph(rival.mph - MPH_CONE_LOSS);
-          objs.splice(i, 1);
-          continue;
-        }
-      }
-
-      // champion collects boosts too (champion mode only)
-      if (state.mode === MODE.CHAMP && champ.active && o.type === 'boost' && !state.endCine) {
-        const crx = champ.x - champ.w*0.34;
-        const cry = champ.y - champ.h*0.40;
-        const crw = champ.w*0.68;
-        const crh = champ.h*0.80;
-        if (rectCircleCollide(crx, cry, crw, crh, o.x, o.y, o.r)) {
-          champ.mph = clamp(champ.mph + MPH_BOOST_GAIN, 0, 240);
           objs.splice(i, 1);
           continue;
         }
