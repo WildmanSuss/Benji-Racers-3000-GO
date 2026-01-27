@@ -296,7 +296,7 @@ let car1 = null, car2 = null;
 
 
   // --- modes ---
-  const MODE = { RACE: 'race', TIME: 'time', GARAGE: 'garage', CHAMP: 'champ' };
+  const MODE = { RACE: 'race', TIME: 'time', GARAGE: 'garage', CHAMP: 'champ', LEGEND: 'legend' };
 
   // --- garage / car selection ---
   // Update these filenames to match your assets.
@@ -317,7 +317,9 @@ let car1 = null, car2 = null;
   const LS_KEYS = {
     selectedCar: 'benji_selected_car_v1',
     garageUnlocked: 'benji_garage_unlocked_v1',
-    bestTopMph: 'benji_best_topmph_v1'
+    bestTopMph: 'benji_best_topmph_v1',
+    unlockChampion: 'benji_unlock_champion_v1',
+    unlockLegend: 'benji_unlock_legend_v1'
   };
 
   function getSelectedCarId() {
@@ -347,9 +349,23 @@ let car1 = null, car2 = null;
   }
 
 
+function isChampionUnlocked() {
+  return localStorage.getItem(LS_KEYS.unlockChampion) === '1';
+}
+function unlockChampion() {
+  localStorage.setItem(LS_KEYS.unlockChampion, '1');
+}
+function isLegendUnlocked() {
+  return localStorage.getItem(LS_KEYS.unlockLegend) === '1';
+}
+function unlockLegend() {
+  localStorage.setItem(LS_KEYS.unlockLegend, '1');
+}
+
+
+
 // --- Champion Race (new mode) ---
-// Unlock: hit >= 200 Top MPH in Time Trial.
-const CHAMP_UNLOCK_TOP_MPH = 200;
+// Unlock: win Race to 100.
 
 // Championship Race is a "speed duel":
 // First to reach the target speed triggers the checkered finish line.
@@ -365,6 +381,29 @@ const CHAMP_START_MPH_CHAMP  = 210;
 
 // Where the checkered finish line starts (higher = slightly longer final sprint)
 const CHAMP_FINISH_START_Y = -420;
+
+// --- Legend Race (harder tier) ---
+// Unlock: beat the Champion.
+const LEGEND_TARGET_MPH = 700;
+const LEGEND_MAX_MISTAKES = 4;
+const LEGEND_START_MPH_PLAYER = 400;
+const LEGEND_START_MPH_CHAMP  = 410;
+
+// Helper: duel modes (Champion + Legend)
+function isDuelMode() { return state.mode === MODE.CHAMP || state.mode === MODE.LEGEND; }
+function duelTargetMph() { return (state.mode === MODE.LEGEND) ? LEGEND_TARGET_MPH : CHAMP_TARGET_MPH; }
+function duelMaxMistakes() { return (state.mode === MODE.LEGEND) ? LEGEND_MAX_MISTAKES : CHAMP_MAX_MISTAKES; }
+function duelStartPlayerMph() { return (state.mode === MODE.LEGEND) ? LEGEND_START_MPH_PLAYER : CHAMP_START_MPH_PLAYER; }
+function duelStartChampMph() { return (state.mode === MODE.LEGEND) ? LEGEND_START_MPH_CHAMP : CHAMP_START_MPH_CHAMP; }
+function duelBoostGain() { return CHAMP_BOOST_GAIN; } // keep same for fairness at high speed
+function duelMaxMphClamp() { return (state.mode === MODE.LEGEND) ? 760 : 560; }
+
+function mistakeIconString(mistakes, maxMistakes) {
+  const m = clamp(mistakes, 0, maxMistakes);
+  return ('❌ '.repeat(m) + '⚠️ '.repeat(Math.max(0, maxMistakes - m))).trim();
+}
+
+
 
 // --- constants ---
   const MPH_START = 10;
@@ -586,13 +625,12 @@ const champ = {
       </div>
 
       <div class="btnRow">
-        <button id="btnRace">Race</button>
-        <button id="btnTime">Time Trial</button>
-        <button id="btnChamp">Championship Race</button>
-        <button id="btnGarage">Garage</button>
-      </div>
-
-      <div id="champLockLine" style="margin-top:10px; font-size:14px; opacity:0.82;"></div>
+  <button id="btnRace">Race</button>
+  <button id="btnTime">Time Trial</button>
+  ${isChampionUnlocked() ? '<button id="btnChamp">Championship Race</button>' : ''}
+  ${isLegendUnlocked() ? '<button id="btnLegend">Legend Race</button>' : ''}
+  <button id="btnGarage">Garage</button>
+</div>
 
       <div style="margin-top:12px; font-size:13px; opacity:0.75;">
         Tip: On iPad, Share → Add to Home Screen.
@@ -627,27 +665,13 @@ const champ = {
     document.getElementById('btnTime').onclick = () => { sfxPlay('click'); startGame(MODE.TIME); };
     document.getElementById('btnGarage').onclick = () => { sfxPlay('click'); showGarageScreen(); };
 
-    // Champion Race unlock (Top MPH >= 200 in Time Trial)
-    const best = getBestTopMph();
-    const champUnlocked = best >= CHAMP_UNLOCK_TOP_MPH;
-    const champBtn = document.getElementById('btnChamp');
-    const champLine = document.getElementById('champLockLine');
+// Wire buttons (Champion/Legend buttons only exist when unlocked)
+const champBtn = document.getElementById('btnChamp');
+if (champBtn) champBtn.onclick = () => { sfxPlay('click'); startGame(MODE.CHAMP); };
 
-    if (champBtn) {
-      champBtn.disabled = !champUnlocked;
-      champBtn.style.opacity = champUnlocked ? '1' : '0.45';
-      champBtn.style.cursor = champUnlocked ? 'pointer' : 'not-allowed';
-      champBtn.onclick = () => {
-        if (!champUnlocked) return;
-        sfxPlay('click');
-        startGame(MODE.CHAMP);
-      };
-    }
-    if (champLine) {
-      champLine.innerHTML = champUnlocked
-        ? `<span style="opacity:0.95;">Champion Race unlocked ✅</span>`
-        : `Unlock Champion Race: hit <b>${CHAMP_UNLOCK_TOP_MPH} Top MPH</b> in Time Trial. Your best: <b>${Math.round(best)} MPH</b>.`;
-    }
+const legendBtn = document.getElementById('btnLegend');
+if (legendBtn) legendBtn.onclick = () => { sfxPlay('click'); startGame(MODE.LEGEND); };
+
   }
 
 
@@ -844,7 +868,7 @@ const champ = {
       setRivalMph(clamp(MPH_START + (Math.random()*8 - 4), 6, 18));
       updateRivalX();
       rival.y = player.y + rival.yOffset;
-    } else if (state.mode === MODE.CHAMP) {
+    } else if (isDuelMode()) {
       // Champion race: rival off, champion on
       rival.active = false;
 
@@ -865,6 +889,29 @@ const champ = {
 
       updateChampX();
       champ.y = player.y + champ.yOffset;
+
+} else if (state.mode === MODE.LEGEND) {
+  // Legend race: duel structure, harder numbers
+  rival.active = false;
+
+  setMph(duelStartPlayerMph());
+  state.topMph = Math.max(state.topMph, state.mph);
+
+  state.playerQualified = false;
+  state.champQualified = false;
+  state.finishLeader = null;
+  state.mistakes = 0;
+
+  champ.active = true;
+  champ.lane = 1;
+  champ.laneF = 1;
+  champ.targetLane = 1;
+  champ.mph = duelStartChampMph();
+  champ.yOffset = -160;
+  champ.laneCD = 0.6;
+
+  updateChampX();
+  champ.y = player.y + champ.yOffset;
     } else {
       rival.active = false;
     }
@@ -1080,7 +1127,7 @@ const champ = {
         ctx.font = '800 16px system-ui, -apple-system, Segoe UI, Roboto, Arial';
         ctx.fillText(`FINISH LINE!`, 14, 76);
       }
-    } else if (state.mode === MODE.CHAMP) {
+    } else if (isDuelMode()) {
       // Championship Race: speed duel to the (hidden) target
       const barX = 14, barY = 44, barW = 280, barH = 14;
       ctx.fillStyle = 'rgba(255,255,255,0.18)';
@@ -1107,11 +1154,11 @@ const champ = {
       ctx.fillStyle = 'rgba(255,255,255,0.78)';
       ctx.fillText('YOU', barX, barY + barH + 16);
       ctx.fillStyle = 'rgba(255,120,120,0.86)';
-      ctx.fillText('CHAMP', barX + 58, barY + barH + 16);
+      ctx.fillText((state.mode === MODE.LEGEND) ? 'LEGEND' : 'CHAMP', barX + 58, barY + barH + 16);
 
       ctx.font = '800 16px system-ui, -apple-system, Segoe UI, Roboto, Arial';
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillText(`Mistakes: ${state.mistakes}/${CHAMP_MAX_MISTAKES}`, 14, 84);
+      ctx.fillText(mistakeIconString(state.mistakes, duelMaxMistakes()), 14, 84);
 
       if (state.finishActive && !state.finishCrossed) {
         ctx.fillStyle = 'rgba(255,255,255,0.80)';
@@ -1149,7 +1196,7 @@ function drawCars(wob) {
   }
 
   // Champion (champion mode) - uses the same rival sprite for now
-  if (state.mode === MODE.CHAMP && champ.active) {
+  if (isDuelMode() && champ.active) {
     drawSpriteCentered(champCarOK ? champCar : null, champ.x, champ.y, champ.w, champ.h, wob * 0.20);
   }
 
@@ -1215,8 +1262,8 @@ function drawCars(wob) {
     }
 
 
-// champion (champion mode only)
-if (state.mode === MODE.CHAMP && champ.active) {
+// champion (duel modes: Champion + Legend)
+if (isDuelMode() && champ.active) {
   // End cinematic disables normal interaction
   if (state.endCine) {
     state.endCine.t += dt;
@@ -1239,10 +1286,13 @@ if (state.mode === MODE.CHAMP && champ.active) {
     if (state.endCine.t > 1.15) {
       if (state.endCine.type === 'lose') {
         sfxPlay('lose');
-        showEndScreen('Oh no!', `The Champion beat you.<br><b>Mistakes:</b> ${state.mistakes}/${CHAMP_MAX_MISTAKES}`);
+        showEndScreen('Oh no!', (state.mode === MODE.LEGEND)
+          ? `The Legend beat you.<br><b>Mistakes:</b> ${state.mistakes}/${duelMaxMistakes()}`
+          : `The Champion beat you.<br><b>Mistakes:</b> ${state.mistakes}/${duelMaxMistakes()}`);
       } else {
         sfxPlay('win');
-        showEndScreen('You Win!', `You beat the Champion!`);
+        try { if (state.mode === MODE.CHAMP) unlockLegend(); } catch {}
+        showEndScreen('You Win!', (state.mode === MODE.LEGEND) ? `You beat the Legend!` : `You beat the Champion!`);
       }
       return;
     }
@@ -1250,8 +1300,8 @@ if (state.mode === MODE.CHAMP && champ.active) {
     // Normal champ race updates
 
     // Qualification (reaching target speed) triggers the finish line.
-    if (!state.playerQualified && state.mph >= CHAMP_TARGET_MPH) state.playerQualified = true;
-    if (!state.champQualified && champ.mph >= CHAMP_TARGET_MPH) state.champQualified = true;
+    if (!state.playerQualified && state.mph >= duelTargetMph()) state.playerQualified = true;
+    if (!state.champQualified && champ.mph >= duelTargetMph()) state.champQualified = true;
 
     if (!state.finishActive && (state.playerQualified || state.champQualified)) {
       state.finishActive = true;
@@ -1330,7 +1380,7 @@ if (state.mode === MODE.CHAMP && champ.active) {
     spawnBoostCD -= dt;
 
     const spdFactor = clamp(state.mph / 60, 0.3, 1.45);
-    const boostBias = (state.mode === MODE.TIME) ? 1.25 : (state.mode === MODE.CHAMP ? 1.15 : 1.0);
+    const boostBias = (state.mode === MODE.TIME) ? 1.25 : (isDuelMode() ? 1.15 : 1.0);
 
     const allowSpawns = (state.mode === MODE.TIME) || (!state.finishActive);
     if (allowSpawns) {
@@ -1360,9 +1410,9 @@ if (state.mode === MODE.CHAMP && champ.active) {
       sfxPlay('bump');
       setMph(state.mph - MPH_EDGE_SCRAPE_LOSS);
 
-      if (state.mode === MODE.CHAMP && !state.endCine) {
+      if (isDuelMode() && !state.endCine) {
         state.mistakes++;
-        if (state.mistakes >= CHAMP_MAX_MISTAKES) state.endCine = { type: 'lose', t: 0 };
+        if (state.mistakes >= duelMaxMistakes()) state.endCine = { type: 'lose', t: 0 };
       }
     }
 
@@ -1379,16 +1429,16 @@ if (state.mode === MODE.CHAMP && champ.active) {
 
       if (rectCircleCollide(prx, pry, prw, prh, o.x, o.y, o.r)) {
         if (o.type === 'boost') {
-          setMph(state.mph + ((state.mode === MODE.CHAMP) ? CHAMP_BOOST_GAIN : MPH_BOOST_GAIN));
+          setMph(state.mph + (isDuelMode() ? duelBoostGain() : MPH_BOOST_GAIN));
           sfxPlay('boost');
         } else {
           doBump();
           sfxPlay('cone');
           setMph(state.mph - MPH_CONE_LOSS);
 
-          if (state.mode === MODE.CHAMP && !state.endCine) {
+          if (isDuelMode() && !state.endCine) {
             state.mistakes++;
-            if (state.mistakes >= CHAMP_MAX_MISTAKES) state.endCine = { type: 'lose', t: 0 };
+            if (state.mistakes >= duelMaxMistakes()) state.endCine = { type: 'lose', t: 0 };
           }
         }
         objs.splice(i, 1);
@@ -1411,13 +1461,13 @@ if (state.mode === MODE.CHAMP && champ.active) {
       }
 
       // champion collects boosts too (champion mode only)
-      if (state.mode === MODE.CHAMP && champ.active && o.type === 'boost' && !state.endCine) {
+      if (isDuelMode() && champ.active && o.type === 'boost' && !state.endCine) {
         const crx = champ.x - champ.w*0.34;
         const cry = champ.y - champ.h*0.40;
         const crw = champ.w*0.68;
         const crh = champ.h*0.80;
         if (rectCircleCollide(crx, cry, crw, crh, o.x, o.y, o.r)) {
-          champ.mph = clamp(champ.mph + CHAMP_BOOST_GAIN, 0, 560);
+          champ.mph = clamp(champ.mph + duelBoostGain(), 0, duelMaxMphClamp());
           objs.splice(i, 1);
           continue;
         }
@@ -1456,13 +1506,15 @@ if (state.mode === MODE.CHAMP && champ.active) {
     }
 
     // finish line progression + win
-    if ((state.mode === MODE.RACE || state.mode === MODE.CHAMP) && state.finishActive && !state.finishCrossed) {
+    if ((state.mode === MODE.RACE || isDuelMode()) && state.finishActive && !state.finishCrossed) {
       state.finishY += scroll;
       if (state.finishY >= player.y - 20) {
         state.finishCrossed = true;
 
         if (state.mode === MODE.RACE) {
           sfxPlay('win');
+          // Progression: winning Race unlocks Championship
+          try { unlockChampion(); } catch {}
           showEndScreen('You Win!', `You reached <b>${MPH_GOAL} MPH</b> and crossed the finish line first.`);
           return;
         } else {
@@ -1489,7 +1541,7 @@ if (state.mode === MODE.CHAMP && champ.active) {
 
     drawRoad(r);
 
-    if ((state.mode === MODE.RACE || state.mode === MODE.CHAMP) && state.finishActive && !state.finishCrossed) {
+    if ((state.mode === MODE.RACE || isDuelMode()) && state.finishActive && !state.finishCrossed) {
       drawFinishLine(r);
     }
 
