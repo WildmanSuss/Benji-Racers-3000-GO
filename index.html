@@ -351,10 +351,15 @@ let car1 = null, car2 = null;
 // Unlock: hit >= 200 Top MPH in Time Trial.
 const CHAMP_UNLOCK_TOP_MPH = 200;
 
+<<<<<<< HEAD
 // Championship Race is a "speed duel":
 // First to reach the target speed triggers the checkered finish line.
 // Whoever crosses the line *qualified* wins.
 const CHAMP_TARGET_MPH = 500;
+=======
+// Hidden finish distance (we show a progress bar, not the number).
+const CHAMP_FINISH_DIST = 1200;
+>>>>>>> bdaedb3375da093b63bee258214de66d5ce2237e
 
 // Lose after 6 mistakes (cones + edge scrapes).
 const CHAMP_MAX_MISTAKES = 6;
@@ -813,6 +818,10 @@ const champ = {
     state.finishY = -9999;
 
     state.timeLeft = 60;
+<<<<<<< HEAD
+=======
+
+>>>>>>> bdaedb3375da093b63bee258214de66d5ce2237e
     // Champion race state
     state.playerQualified = false;
     state.champQualified = false;
@@ -1249,6 +1258,7 @@ if (state.mode === MODE.CHAMP && champ.active) {
   } else {
     // Normal champ race updates
 
+<<<<<<< HEAD
     // Qualification (reaching target speed) triggers the finish line.
     if (!state.playerQualified && state.mph >= CHAMP_TARGET_MPH) state.playerQualified = true;
     if (!state.champQualified && champ.mph >= CHAMP_TARGET_MPH) state.champQualified = true;
@@ -1280,6 +1290,16 @@ if (state.mode === MODE.CHAMP && champ.active) {
     // Don't let AI "teleport" to 500; boosts do the big jumps.
     target = clamp(target, 190, 280);
 
+=======
+    // Light rubber banding
+    const gap = state.champDist - state.playerDist; // + means champ ahead
+    let target = state.mph + 4;
+
+    if (gap > 35) target -= 18;
+    if (gap < -25) target += 14;
+
+    target = clamp(target, 150, 228);
+>>>>>>> bdaedb3375da093b63bee258214de66d5ce2237e
     champ.mph += (target - champ.mph) * (dt * 2.6);
     champ.mph = Math.max(0, champ.mph);
 
