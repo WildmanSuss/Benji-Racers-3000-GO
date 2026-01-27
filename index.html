@@ -1257,12 +1257,12 @@ if (state.mode === MODE.CHAMP && champ.active) {
 
     // Light rubber banding
     const gap = state.champDist - state.playerDist; // + means champ ahead
-    let target = state.mph + 10;
+    let target = state.mph + 4;
 
-    if (gap > 45) target -= 12;
+    if (gap > 35) target -= 18;
     if (gap < -25) target += 14;
 
-    target = clamp(target, 150, 240);
+    target = clamp(target, 150, 228);
     champ.mph += (target - champ.mph) * (dt * 2.6);
 
     // Occasional lane changes
