@@ -289,6 +289,8 @@
 
 let car1 = null, car2 = null;
   let car1OK = false, car2OK = false;
+  let champCar = null;
+  let champCarOK = false;
   // Player selectable car sprites (loaded dynamically from GARAGE_CARS)
   const carSprites = Object.create(null); // id -> { img, ok }
 
@@ -301,11 +303,11 @@ let car1 = null, car2 = null;
   // Sprites: used in-game for the player car.
   // Heroes: used in the Garage screen as a big display image.
   const GARAGE_CARS = [
-    { id: 'red',     name: 'Red Racer',     sprite: 'assets/car_red.png',     hero: 'assets/garage_red.png' },
-    { id: 'blue',    name: 'Blue Racer',    sprite: 'assets/car_blue.png',    hero: 'assets/garage_blue.png' },
-    { id: 'pink',    name: 'Pink Racer',    sprite: 'assets/car_pink.png',    hero: 'assets/garage_pink.png' },
-    { id: 'green',   name: 'Green Racer',   sprite: 'assets/car_green.png',   hero: 'assets/garage_green.png' },
-    { id: 'mystery', name: 'Mystery Racer', sprite: 'assets/car_mystery.png', hero: 'assets/garage_mystery.png' },
+    { id: 'red',     name: 'The Red Car',     sprite: 'assets/car_red.png',     hero: 'assets/garage_red.png' },
+    { id: 'blue',    name: 'Blue Mama',    sprite: 'assets/car_blue.png',    hero: 'assets/garage_blue.png' },
+    { id: 'pink',    name: 'Pink Dad',    sprite: 'assets/car_pink.png',    hero: 'assets/garage_pink.png' },
+    { id: 'green',   name: 'Benji Monster',   sprite: 'assets/car_green.png',   hero: 'assets/garage_green.png' },
+    { id: 'mystery', name: 'Mystery Hannah', sprite: 'assets/car_mystery.png', hero: 'assets/garage_mystery.png' },
   ];
 
   // Optional unlock gate (set to 0 to always unlock):
@@ -582,9 +584,9 @@ const champ = {
       </div>
 
       <div class="btnRow">
-        <button id="btnRace">Race to 100 (Rival)</button>
-        <button id="btnTime">Time Trial (1:00)</button>
-        <button id="btnChamp">Champion Race</button>
+        <button id="btnRace">Race</button>
+        <button id="btnTime">Time Trial</button>
+        <button id="btnChamp">Championship Race</button>
         <button id="btnGarage">Garage</button>
       </div>
 
@@ -1146,7 +1148,7 @@ function drawCars(wob) {
 
   // Champion (champion mode) - uses the same rival sprite for now
   if (state.mode === MODE.CHAMP && champ.active) {
-    drawSpriteCentered(car2OK ? car2 : null, champ.x, champ.y, champ.w, champ.h, wob * 0.20);
+    drawSpriteCentered(champCarOK ? champCar : null, champ.x, champ.y, champ.w, champ.h, wob * 0.20);
   }
 
   // Player car depends on Garage selection
@@ -1492,7 +1494,11 @@ if (state.mode === MODE.CHAMP && champ.active) {
     car2OK = b.ok; car2 = b.img;
 
 
-    showTitleScreen();
+    
+    // Champion car sprite
+    const c = await loadImg('assets/car_champion.png');
+    champCarOK = c.ok; champCar = c.img;
+showTitleScreen();
     requestAnimationFrame(tick);
   })();
 
