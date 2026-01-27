@@ -291,6 +291,9 @@ let car1 = null, car2 = null;
   let car1OK = false, car2OK = false;
   let champCar = null;
   let champCarOK = false;
+
+  let legendCar = null;
+  let legendCarOK = false;
   // Player selectable car sprites (loaded dynamically from GARAGE_CARS)
   const carSprites = Object.create(null); // id -> { img, ok }
 
@@ -494,6 +497,10 @@ finishLeader: null,   // 'player' | 'champ' | null (who triggered the finish lin
 mistakes: 0,
 
 endCine: null,        // { type:'lose'|'win', t:number }
+    forceFinishLine: false,
+    finishFlash: 0,
+    screenFlash: 0,
+    finishBeatDone: false,
   };
 
   const player = {
@@ -843,6 +850,10 @@ if (legendBtn) legendBtn.onclick = () => { sfxPlay('click'); startGame(MODE.LEGE
     state.finishLeader = null;
     state.mistakes = 0;
     state.endCine = null;
+    state.forceFinishLine = false;
+    state.finishFlash = 0;
+    state.screenFlash = 0;
+    state.finishBeatDone = false;
 
     champ.active = false;
     champ.lane = 1;
@@ -888,6 +899,15 @@ if (legendBtn) legendBtn.onclick = () => { sfxPlay('click'); startGame(MODE.LEGE
       champ.laneCD = 0.6;
 
       updateChampX();
+    // Finish-line beat (flash + whoosh) once per cinematic
+    if (!state.finishBeatDone && state.endCine.t > 0.42) {
+      state.finishBeatDone = true;
+      state.finishFlash = 0.22;
+      state.screenFlash = 0.14;
+      state.shake = Math.max(state.shake, 9);
+      sfxPlay('boost'); // reused as whoosh
+    }
+
       champ.y = player.y + champ.yOffset;
 
 } else if (state.mode === MODE.LEGEND) {
@@ -1054,6 +1074,13 @@ if (legendBtn) legendBtn.onclick = () => { sfxPlay('click'); startGame(MODE.LEGE
     ctx.strokeStyle = 'rgba(255,255,255,0.6)';
     ctx.lineWidth = 3;
     ctx.strokeRect(0, 0, cols*tile, rows*tile);
+    // Flash the finish line area
+    if (state.finishFlash > 0) {
+      const a = Math.min(1, state.finishFlash / 0.22);
+      ctx.fillStyle = `rgba(255,255,255,${0.55 * a})`;
+      ctx.fillRect(0, -60, cols*tile, rows*tile + 120);
+    }
+
     ctx.restore();
   }
 
@@ -1268,6 +1295,8 @@ if (isDuelMode() && champ.active) {
   if (state.endCine) {
     state.endCine.t += dt;
 
+    state.finishFlash = Math.max(0, state.finishFlash - dt);
+    state.screenFlash = Math.max(0, state.screenFlash - dt);
     if (state.endCine.type === 'lose') {
       // player slows, champ surges and passes
       setMph(state.mph + (120 - state.mph) * (dt * 2.4));
@@ -1413,6 +1442,8 @@ if (isDuelMode() && champ.active) {
       if (isDuelMode() && !state.endCine) {
         state.mistakes++;
         if (state.mistakes >= duelMaxMistakes()) state.endCine = { type: 'lose', t: 0 };
+          state.forceFinishLine = true;
+          state.finishBeatDone = false;
       }
     }
 
@@ -1439,6 +1470,8 @@ if (isDuelMode() && champ.active) {
           if (isDuelMode() && !state.endCine) {
             state.mistakes++;
             if (state.mistakes >= duelMaxMistakes()) state.endCine = { type: 'lose', t: 0 };
+          state.forceFinishLine = true;
+          state.finishBeatDone = false;
           }
         }
         objs.splice(i, 1);
@@ -1576,6 +1609,10 @@ if (isDuelMode() && champ.active) {
     // Champion car sprite
     const c = await loadImg('assets/car_champion.png');
     champCarOK = c.ok; champCar = c.img;
+
+    // Legend car sprite
+    const d = await loadImg('assets/car_legend.png');
+    legendCarOK = d.ok; legendCar = d.img;
 showTitleScreen();
     requestAnimationFrame(tick);
   })();
