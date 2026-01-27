@@ -351,28 +351,22 @@ let car1 = null, car2 = null;
 // Unlock: hit >= 200 Top MPH in Time Trial.
 const CHAMP_UNLOCK_TOP_MPH = 200;
 
-// Championship Race is a "speed duel":
-// First to reach the target speed triggers the checkered finish line.
-// Whoever crosses the line *qualified* wins.
-const CHAMP_TARGET_MPH = 500;
+// Hidden finish distance (we show a progress bar, not the number).
+const CHAMP_FINISH_DIST = 400;
 
 // Lose after 6 mistakes (cones + edge scrapes).
 const CHAMP_MAX_MISTAKES = 6;
 
 // "Starts fast" feel:
-const CHAMP_START_MPH_PLAYER = 200;
-const CHAMP_START_MPH_CHAMP  = 210;
+const CHAMP_START_MPH_PLAYER = 170;
+const CHAMP_START_MPH_CHAMP  = 185;
 
-// Where the checkered finish line starts (higher = slightly longer final sprint)
-const CHAMP_FINISH_START_Y = -420;
-
-// --- constants ---
+  // --- constants ---
   const MPH_START = 10;
   const MPH_GOAL  = 100;
   const MPH_MAX_RACE = 120;
 
   const MPH_BOOST_GAIN = 10;
-  const CHAMP_BOOST_GAIN = 18; // champ mode boost value (higher to make 200→500 achievable)
   const MPH_CONE_LOSS  = 15;
   const MPH_EDGE_SCRAPE_LOSS = 6;
 
@@ -444,15 +438,19 @@ const CHAMP_FINISH_START_Y = -420;
     finishCrossed: false,
 
     // time trial
-    timeLeft: 60,
+    timeLeft: 120,
 
     rivalCrashCD: 0,
 
 // champion race
-champQualified: false,
-playerQualified: false,
-finishLeader: null,   // 'player' | 'champ' | null (who triggered the finish line)
+playerDist: 0,
+champDist: 0,
 mistakes: 0,
+
+champMph: 0,
+champLane: 1,         // float (for smooth lane switching)
+champTargetLane: 1,   // int 0-2
+champLaneCD: 0,
 
 endCine: null,        // { type:'lose'|'win', t:number }
   };
@@ -812,12 +810,16 @@ const champ = {
     state.finishCrossed = false;
     state.finishY = -9999;
 
-    state.timeLeft = 60;
+    state.timeLeft = 120;
+
     // Champion race state
-    state.playerQualified = false;
-    state.champQualified = false;
-    state.finishLeader = null;
+    state.playerDist = 0;
+    state.champDist = 0;
     state.mistakes = 0;
+    state.champMph = 0;
+    state.champLane = 1;
+    state.champTargetLane = 1;
+    state.champLaneCD = 0;
     state.endCine = null;
 
     champ.active = false;
@@ -851,10 +853,11 @@ const champ = {
       // Start fast
       setMph(CHAMP_START_MPH_PLAYER);
       state.topMph = Math.max(state.topMph, state.mph);
-      state.playerQualified = false;
-      state.champQualified = false;
-      state.finishLeader = null;
+
+      state.playerDist = 0;
+      state.champDist = 0;
       state.mistakes = 0;
+
       champ.active = true;
       champ.lane = 1;
       champ.laneF = 1;
@@ -1081,13 +1084,13 @@ const champ = {
         ctx.fillText(`FINISH LINE!`, 14, 76);
       }
     } else if (state.mode === MODE.CHAMP) {
-      // Championship Race: speed duel to the (hidden) target
+      // Progress bar race (hidden 400 under the hood)
       const barX = 14, barY = 44, barW = 280, barH = 14;
       ctx.fillStyle = 'rgba(255,255,255,0.18)';
       ctx.fillRect(barX, barY, barW, barH);
 
-      const pPct = clamp((state.mph - CHAMP_START_MPH_PLAYER) / (CHAMP_TARGET_MPH - CHAMP_START_MPH_PLAYER), 0, 1);
-      const cPct = clamp((champ.mph - CHAMP_START_MPH_PLAYER) / (CHAMP_TARGET_MPH - CHAMP_START_MPH_PLAYER), 0, 1);
+      const pPct = clamp(state.playerDist / CHAMP_FINISH_DIST, 0, 1);
+      const cPct = clamp(state.champDist / CHAMP_FINISH_DIST, 0, 1);
 
       ctx.strokeStyle = 'rgba(255,255,255,0.35)';
       ctx.lineWidth = 2;
@@ -1113,11 +1116,6 @@ const champ = {
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.fillText(`Mistakes: ${state.mistakes}/${CHAMP_MAX_MISTAKES}`, 14, 84);
 
-      if (state.finishActive && !state.finishCrossed) {
-        ctx.fillStyle = 'rgba(255,255,255,0.80)';
-        ctx.font = '900 16px system-ui, -apple-system, Segoe UI, Roboto, Arial';
-        ctx.fillText('FINAL SPRINT!', 14, 108);
-      }
     } else {
       ctx.font = '800 18px system-ui, -apple-system, Segoe UI, Roboto, Arial';
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -1223,15 +1221,20 @@ if (state.mode === MODE.CHAMP && champ.active) {
 
     if (state.endCine.type === 'lose') {
       // player slows, champ surges and passes
-      setMph(state.mph + (120 - state.mph) * (dt * 2.4));
-      champ.mph += (520 - champ.mph) * (dt * 2.0);
-      champ.yOffset += (-280 - champ.yOffset) * (dt * 2.2); // champ shoots ahead
+      setMph(state.mph + (90 - state.mph) * (dt * 2.2));
+      champ.mph += (240 - champ.mph) * (dt * 2.2);
+      champ.yOffset += (-260 - champ.yOffset) * (dt * 2.2); // champ shoots ahead
     } else {
-      // win: player keeps momentum, champ falls back
-      setMph(state.mph + (240 - state.mph) * (dt * 1.8));
-      champ.mph += (180 - champ.mph) * (dt * 1.8);
-      champ.yOffset += (140 - champ.yOffset) * (dt * 2.0); // champ drops behind
+      // win: player surges slightly, champ falls back
+      setMph(state.mph + (210 - state.mph) * (dt * 1.8));
+      champ.mph += (150 - champ.mph) * (dt * 1.6);
+      champ.yOffset += (120 - champ.yOffset) * (dt * 1.8); // champ drops behind
     }
+
+    // Update distances during the cine so the bar keeps moving
+    const k = 0.22;
+    state.playerDist += state.mph * dt * k;
+    state.champDist  += champ.mph * dt * k;
 
     champ.y = player.y + champ.yOffset;
     updateChampX();
@@ -1239,7 +1242,7 @@ if (state.mode === MODE.CHAMP && champ.active) {
     if (state.endCine.t > 1.15) {
       if (state.endCine.type === 'lose') {
         sfxPlay('lose');
-        showEndScreen('Oh no!', `The Champion beat you.<br><b>Mistakes:</b> ${state.mistakes}/${CHAMP_MAX_MISTAKES}`);
+        showEndScreen('Oh no!', `The Champion passed you.<br><b>Mistakes:</b> ${state.mistakes}/${CHAMP_MAX_MISTAKES}`);
       } else {
         sfxPlay('win');
         showEndScreen('You Win!', `You beat the Champion!`);
@@ -1248,59 +1251,43 @@ if (state.mode === MODE.CHAMP && champ.active) {
     }
   } else {
     // Normal champ race updates
+    const k = 0.22; // mph -> distance scale
+    state.playerDist += state.mph * dt * k;
+    state.champDist  += champ.mph * dt * k;
 
-    // Qualification (reaching target speed) triggers the finish line.
-    if (!state.playerQualified && state.mph >= CHAMP_TARGET_MPH) state.playerQualified = true;
-    if (!state.champQualified && champ.mph >= CHAMP_TARGET_MPH) state.champQualified = true;
+    // Light rubber banding
+    const gap = state.champDist - state.playerDist; // + means champ ahead
+    let target = state.mph + 10;
 
-    if (!state.finishActive && (state.playerQualified || state.champQualified)) {
-      state.finishActive = true;
-      state.finishCrossed = false;
-      state.finishY = CHAMP_FINISH_START_Y;
+    if (gap > 45) target -= 12;
+    if (gap < -25) target += 14;
 
-      // Who triggered the finish first (for tie-breaking flavor if needed)
-      if (!state.finishLeader) {
-        if (state.playerQualified && !state.champQualified) state.finishLeader = 'player';
-        else if (state.champQualified && !state.playerQualified) state.finishLeader = 'champ';
-        else state.finishLeader = (state.mph >= champ.mph) ? 'player' : 'champ';
-      }
-
-      // Cut the champ's speed slightly so the final sprint feels dramatic
-      champ.mph = Math.min(champ.mph, Math.max(220, state.mph + 18));
-      champ.yOffset = -140;
-    }
-
-    // Light rubber-banding on *speed* (not hidden distance)
-    const speedGap = champ.mph - state.mph; // + means champ faster
-    let target = state.mph + 10; // champ baseline advantage
-
-    if (speedGap > 40) target -= 10;   // champ too far ahead -> ease
-    if (speedGap < -25) target += 16;  // champ behind -> surge a bit
-
-    // Don't let AI "teleport" to 500; boosts do the big jumps.
-    target = clamp(target, 190, 280);
-
+    target = clamp(target, 150, 240);
     champ.mph += (target - champ.mph) * (dt * 2.6);
-    champ.mph = Math.max(0, champ.mph);
 
-    // Occasional lane changes (more frequent before finish)
-    const cdBase = state.finishActive ? 0.45 : 0.70;
+    // Occasional lane changes
     champ.laneCD -= dt;
     if (champ.laneCD <= 0) {
-      champ.laneCD = cdBase + Math.random() * 0.55;
+      champ.laneCD = 0.7 + Math.random() * 0.6;
       champ.targetLane = Math.floor(Math.random() * 3);
     }
     champ.laneF += (champ.targetLane - champ.laneF) * (dt * 4.0);
     champ.laneF = clamp(champ.laneF, 0, 2);
     updateChampX();
 
-    // Place champ vertically relative to speed gap (feel like a race)
-    const pxPerMph = state.finishActive ? 3.8 : 2.6;
-    champ.yOffset = clamp(-160 - speedGap * pxPerMph, -280, 160);
+    // Place champ vertically relative to distance gap
+    const pxPerDist = 3.0;
+    champ.yOffset = clamp(-160 - gap * pxPerDist, -260, 140);
     champ.y = player.y + champ.yOffset;
+
+    // Finish check
+    if (state.playerDist >= CHAMP_FINISH_DIST) {
+      state.endCine = { type: 'win', t: 0 };
+    } else if (state.champDist >= CHAMP_FINISH_DIST) {
+      state.endCine = { type: 'lose', t: 0 };
+    }
   }
 }
-
 
     // finish trigger (race mode only)
     if (state.mode === MODE.RACE && !state.finishActive && state.mph >= MPH_GOAL) {
@@ -1379,7 +1366,7 @@ if (state.mode === MODE.CHAMP && champ.active) {
 
       if (rectCircleCollide(prx, pry, prw, prh, o.x, o.y, o.r)) {
         if (o.type === 'boost') {
-          setMph(state.mph + ((state.mode === MODE.CHAMP) ? CHAMP_BOOST_GAIN : MPH_BOOST_GAIN));
+          setMph(state.mph + MPH_BOOST_GAIN);
           sfxPlay('boost');
         } else {
           doBump();
@@ -1417,7 +1404,7 @@ if (state.mode === MODE.CHAMP && champ.active) {
         const crw = champ.w*0.68;
         const crh = champ.h*0.80;
         if (rectCircleCollide(crx, cry, crw, crh, o.x, o.y, o.r)) {
-          champ.mph = clamp(champ.mph + CHAMP_BOOST_GAIN, 0, 560);
+          champ.mph = clamp(champ.mph + MPH_BOOST_GAIN, 0, 240);
           objs.splice(i, 1);
           continue;
         }
@@ -1455,27 +1442,14 @@ if (state.mode === MODE.CHAMP && champ.active) {
       }
     }
 
-    // finish line progression + win
-    if ((state.mode === MODE.RACE || state.mode === MODE.CHAMP) && state.finishActive && !state.finishCrossed) {
+    // finish line progression + win (race mode only)
+    if (state.mode === MODE.RACE && state.finishActive && !state.finishCrossed) {
       state.finishY += scroll;
       if (state.finishY >= player.y - 20) {
         state.finishCrossed = true;
-
-        if (state.mode === MODE.RACE) {
-          sfxPlay('win');
-          showEndScreen('You Win!', `You reached <b>${MPH_GOAL} MPH</b> and crossed the finish line first.`);
-          return;
-        } else {
-          // Championship Race: whoever qualified (hit the target speed) wins.
-          // If both qualified, whoever is faster at the line wins.
-          let winner = null; // 'player' | 'champ'
-          if (state.playerQualified && !state.champQualified) winner = 'player';
-          else if (state.champQualified && !state.playerQualified) winner = 'champ';
-          else if (state.playerQualified && state.champQualified) winner = (state.mph >= champ.mph) ? 'player' : 'champ';
-          else winner = (state.finishLeader === 'player') ? 'player' : 'champ'; // should be rare
-
-          state.endCine = { type: (winner === 'player') ? 'win' : 'lose', t: 0 };
-        }
+        sfxPlay('win');
+        showEndScreen('You Win!', `You reached <b>${MPH_GOAL} MPH</b> and crossed the finish line first.`);
+        return;
       }
     }
 
@@ -1489,7 +1463,7 @@ if (state.mode === MODE.CHAMP && champ.active) {
 
     drawRoad(r);
 
-    if ((state.mode === MODE.RACE || state.mode === MODE.CHAMP) && state.finishActive && !state.finishCrossed) {
+    if (state.mode === MODE.RACE && state.finishActive && !state.finishCrossed) {
       drawFinishLine(r);
     }
 
