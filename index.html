@@ -126,7 +126,24 @@
       pointer-events:none;
       display:none;
     }
-  </style>
+  
+/* --- Confetti (win celebration) --- */
+#confettiBox { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.confettiPiece {
+  position: absolute;
+  top: -10vh;
+  font-size: 22px;
+  animation: confettiFall 1.6s linear forwards;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 2px 1px rgba(0,0,0,0.25));
+}
+@keyframes confettiFall {
+  0% { transform: translate3d(var(--x, 0px), -10vh, 0) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: translate3d(var(--x, 0px), 110vh, 0) rotate(540deg); opacity: 0.95; }
+}
+
+</style>
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -771,7 +788,31 @@ if (legendBtn) legendBtn.onclick = () => { sfxPlay('click'); startGame(MODE.LEGE
   }
 
 
-  function showEndScreen(title, bodyHtml) {
+  
+  function spawnOverlayConfetti() {
+    // Lightweight DOM confetti (no assets). Clears itself.
+    const box = document.createElement('div');
+    box.id = 'confettiBox';
+    const pieces = 36;
+    const glyphs = ['🎉','✨','🎊','⭐️','💛','💙','💖','💚'];
+    for (let i = 0; i < pieces; i++) {
+      const s = document.createElement('div');
+      s.className = 'confettiPiece';
+      s.textContent = glyphs[(Math.random()*glyphs.length)|0];
+      const left = Math.random()*100;
+      const delay = Math.random()*0.35;
+      const drift = (Math.random()*2 - 1) * 220;
+      s.style.left = left + 'vw';
+      s.style.animationDelay = delay + 's';
+      s.style.setProperty('--x', drift + 'px');
+      box.appendChild(s);
+    }
+    overlay.appendChild(box);
+    // Remove after animation
+    setTimeout(() => { try { box.remove(); } catch(e){} }, 2200);
+  }
+
+function showEndScreen(title, bodyHtml) {
     state.running = false;
     state.ended = true;
     engineStop();
@@ -879,51 +920,30 @@ if (legendBtn) legendBtn.onclick = () => { sfxPlay('click'); startGame(MODE.LEGE
       setRivalMph(clamp(MPH_START + (Math.random()*8 - 4), 6, 18));
       updateRivalX();
       rival.y = player.y + rival.yOffset;
-    } else if (isDuelMode()) {
-      // Champion race: rival off, champion on
+    } else if (state.mode === MODE.CHAMP || state.mode === MODE.LEGEND) {
+      // Duel modes: Champion + Legend
       rival.active = false;
 
-      // Start fast
-      setMph(CHAMP_START_MPH_PLAYER);
+      // Start fast (mode-specific)
+      setMph(duelStartPlayerMph());
       state.topMph = Math.max(state.topMph, state.mph);
+
       state.playerQualified = false;
       state.champQualified = false;
       state.finishLeader = null;
       state.mistakes = 0;
+
       champ.active = true;
       champ.lane = 1;
       champ.laneF = 1;
       champ.targetLane = 1;
-      champ.mph = CHAMP_START_MPH_CHAMP;
+      champ.mph = duelStartChampMph();
       champ.yOffset = -160;
       champ.laneCD = 0.6;
 
       updateChampX();
       champ.y = player.y + champ.yOffset;
-
-} else if (state.mode === MODE.LEGEND) {
-  // Legend race: duel structure, harder numbers
-  rival.active = false;
-
-  setMph(duelStartPlayerMph());
-  state.topMph = Math.max(state.topMph, state.mph);
-
-  state.playerQualified = false;
-  state.champQualified = false;
-  state.finishLeader = null;
-  state.mistakes = 0;
-
-  champ.active = true;
-  champ.lane = 1;
-  champ.laneF = 1;
-  champ.targetLane = 1;
-  champ.mph = duelStartChampMph();
-  champ.yOffset = -160;
-  champ.laneCD = 0.6;
-
-  updateChampX();
-  champ.y = player.y + champ.yOffset;
-    } else {
+    }} else {
       rival.active = false;
     }
   }
@@ -1224,7 +1244,7 @@ function drawCars(wob) {
 
   // Champion (champion mode) - uses the same rival sprite for now
   if (isDuelMode() && champ.active) {
-    drawSpriteCentered(champCarOK ? champCar : null, champ.x, champ.y, champ.w, champ.h, wob * 0.20);
+    drawSpriteCentered((state.mode === MODE.LEGEND && legendCarOK) ? legendCar : (champCarOK ? champCar : null), champ.x, champ.y, champ.w, champ.h, wob * 0.20);
   }
 
   // Player car depends on Garage selection
@@ -1259,6 +1279,7 @@ function drawCars(wob) {
       state.timeLeft -= dt;
       if (state.timeLeft <= 0) {
         sfxPlay('win');
+        spawnOverlayConfetti();
         showEndScreen('Time!', 'Time trial complete.');
         return;
       }
@@ -1299,7 +1320,7 @@ if (isDuelMode() && champ.active) {
       // player slows, champ surges and passes
       setMph(state.mph + (120 - state.mph) * (dt * 2.4));
       champ.mph += (520 - champ.mph) * (dt * 2.0);
-      champ.yOffset += (-280 - champ.yOffset) * (dt * 2.2); // champ shoots ahead
+      champ.yOffset += (-340 - champ.yOffset) * (dt * 2.2); // champ shoots ahead
     } else {
       // win: player keeps momentum, champ falls back
       setMph(state.mph + (240 - state.mph) * (dt * 1.8));
@@ -1327,6 +1348,7 @@ if (isDuelMode() && champ.active) {
           : `The Champion beat you.<br><b>Mistakes:</b> ${state.mistakes}/${duelMaxMistakes()}`);
       } else {
         sfxPlay('win');
+        spawnOverlayConfetti();
         try { if (state.mode === MODE.CHAMP) unlockLegend(); } catch {}
         showEndScreen('You Win!', (state.mode === MODE.LEGEND) ? `You beat the Legend!` : `You beat the Champion!`);
       }
@@ -1553,6 +1575,7 @@ if (isDuelMode() && champ.active) {
 
         if (state.mode === MODE.RACE) {
           sfxPlay('win');
+        spawnOverlayConfetti();
           // Progression: winning Race unlocks Championship
           try { unlockChampion(); } catch {}
           showEndScreen('You Win!', `You reached <b>${MPH_GOAL} MPH</b> and crossed the finish line first.`);
