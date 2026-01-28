@@ -899,15 +899,6 @@ if (legendBtn) legendBtn.onclick = () => { sfxPlay('click'); startGame(MODE.LEGE
       champ.laneCD = 0.6;
 
       updateChampX();
-    // Finish-line beat (flash + whoosh) once per cinematic
-    if (!state.finishBeatDone && state.endCine.t > 0.42) {
-      state.finishBeatDone = true;
-      state.finishFlash = 0.22;
-      state.screenFlash = 0.14;
-      state.shake = Math.max(state.shake, 9);
-      sfxPlay('boost'); // reused as whoosh
-    }
-
       champ.y = player.y + champ.yOffset;
 
 } else if (state.mode === MODE.LEGEND) {
@@ -1153,7 +1144,16 @@ if (legendBtn) legendBtn.onclick = () => { sfxPlay('click'); startGame(MODE.LEGE
         ctx.fillStyle = 'rgba(255,255,255,0.80)';
         ctx.font = '800 16px system-ui, -apple-system, Segoe UI, Roboto, Arial';
         ctx.fillText(`FINISH LINE!`, 14, 76);
-      }
+      
+  // Full-screen flash (finish-line beat)
+  if (state.screenFlash > 0) {
+    const a = Math.min(1, state.screenFlash / 0.14);
+    ctx.save();
+    ctx.fillStyle = `rgba(255,255,255,${0.35 * a})`;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+}
     } else if (isDuelMode()) {
       // Championship Race: speed duel to the (hidden) target
       const barX = 14, barY = 44, barW = 280, barH = 14;
@@ -1295,8 +1295,6 @@ if (isDuelMode() && champ.active) {
   if (state.endCine) {
     state.endCine.t += dt;
 
-    state.finishFlash = Math.max(0, state.finishFlash - dt);
-    state.screenFlash = Math.max(0, state.screenFlash - dt);
     if (state.endCine.type === 'lose') {
       // player slows, champ surges and passes
       setMph(state.mph + (120 - state.mph) * (dt * 2.4));
@@ -1311,6 +1309,15 @@ if (isDuelMode() && champ.active) {
 
     champ.y = player.y + champ.yOffset;
     updateChampX();
+
+    // Finish-line beat (flash + whoosh) once per cinematic
+    if (!state.finishBeatDone && state.endCine.t > 0.42) {
+      state.finishBeatDone = true;
+      state.finishFlash = 0.22;
+      state.screenFlash = 0.14;
+      state.shake = Math.max(state.shake, 9);
+      sfxPlay('boost'); // reused as whoosh
+    }
 
     if (state.endCine.t > 1.15) {
       if (state.endCine.type === 'lose') {
