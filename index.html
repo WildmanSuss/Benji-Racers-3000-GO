@@ -748,7 +748,7 @@ if (legendBtn) legendBtn.onclick = () => { sfxPlay('click'); startGame(MODE.LEGE
     card.innerHTML = `
       <div style="font-size:34px; font-weight:900; margin-bottom:6px;">Garage</div>
       <div style="font-size:15px; opacity:0.90; line-height:1.35;">
-        Pick your car. (This only changes your car; the rival stays the same.)
+        Pick your car.
       </div>
 
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:14px; margin-top:14px;">
@@ -758,7 +758,7 @@ if (legendBtn) legendBtn.onclick = () => { sfxPlay('click'); startGame(MODE.LEGE
       ${lockLine}
 
       <div class="btnRow" style="margin-top:14px; flex-wrap:wrap;">
-        <button id="btnGarageRace">Race to 100</button>
+        <button id="btnGarageRace">Race</button>
         <button id="btnGarageTime">Time Trial</button>
         <button id="btnGarageBack">Back to Menu</button>
       </div>
@@ -1344,8 +1344,8 @@ if (isDuelMode() && champ.active) {
       if (state.endCine.type === 'lose') {
         sfxPlay('lose');
         showEndScreen('Oh no!', (state.mode === MODE.LEGEND)
-          ? `The Legend beat you.<br><b>Mistakes:</b> ${state.mistakes}/${duelMaxMistakes()}`
-          : `The Champion beat you.<br><b>Mistakes:</b> ${state.mistakes}/${duelMaxMistakes()}`);
+          ? `The Legend beat you.<br><b>Crashes:</b> ${state.mistakes}/${duelMaxMistakes()}`
+          : `The Champion beat you.<br><b>Crashes:</b> ${state.mistakes}/${duelMaxMistakes()}`);
       } else {
         sfxPlay('win');
         spawnOverlayConfetti();
